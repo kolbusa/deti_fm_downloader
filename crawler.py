@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 
 import requests
+import json
+
 from urllib.parse import urlparse, urljoin, urlunparse
 from time import sleep
 from bs4 import BeautifulSoup
-from sys import stderr
 
 def getUrl(url, verbose=False):
     if (verbose):
+        from sys import stderr
         stderr.write(f'... fetching {url}\n')
     return requests.get(url)
 
@@ -94,10 +96,23 @@ def getEpisodeData(episodeUrl):
 
 
 if __name__ == '__main__':
+    from sys import stdout
     baseUrl = 'https://www.deti.fm/fairy_tales'
+    programs = []
     for programUrl, programTitle, programCoverUrl in getPrograms(baseUrl):
-        print('\t'.join(['program', programTitle, programCoverUrl]))
+        program = {
+                'title' : programTitle,
+                'cover' : programCoverUrl,
+                }
+        episodes = []
         for episodeNum, (episodeUrl, episodeTitle) in enumerate(reversed(getEpisodes(programUrl))):
             episodeAudioUrl, episodeCoverUrl = getEpisodeData(episodeUrl)
-            print('\t'.join(
-                ['episode', str(episodeNum + 1), episodeTitle, episodeAudioUrl, episodeCoverUrl]))
+            episodes.append({
+                'num' : episodeNum + 1,
+                'title' : episodeTitle,
+                'audioUrl' : episodeAudioUrl,
+                'coverUrl' : episodeCoverUrl,
+                })
+        program['episodes'] = episodes
+        programs.append(program)
+    stdout.write(json.dumps(programs, ensure_ascii=False))
