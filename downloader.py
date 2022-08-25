@@ -33,21 +33,52 @@ def saveFile(url, fileName):
         f.write(response.content)
 
 
+def sanitizeFileName(fileName):
+    fileName = fileName.replace(os.path.sep, '-')
+    baseName, ext = os.path.splitext(fileName)
+    maxLen = 250
+    while len(bytes(fileName, 'utf-8')) > maxLen:
+        baseName = baseName[:-1]
+        fileName = baseName + ext
+    return fileName
+
+
 def downloadPrograms(programs):
+    newPrograms = []
     for program in programs:
         programTitle, coverUrl, programEpisodes = program['title'], program['cover'], program['episodes']
         try:
+            programTitle = sanitizeFileName(programTitle)
             os.mkdir(programTitle)
         except FileExistsError:
             pass
+        except Exception as e:
+            print(f'Could not mkdir \'{programTitle}\': {e}')
+            continue
         coverExt = getUrlFileExt(coverUrl)
-        saveFile(coverUrl + '?w=640&h=480&q=100', f'{programTitle}/cover{coverExt}')
+        coverFileName = f'{programTitle}/cover{coverExt}'
+        if not os.path.isfile(coverFileName):
+            try:
+                saveFile(coverUrl + '?w=640&h=480&q=100', coverFileName)
+            except Exception as e:
+                print(f'Could not save \'{coverFileName}\': {e}')
+                # Something went wrong
+                continue
         for episode in programEpisodes:
             episodeNum, episodeTitle, episodeAudioUrl, episodeCoverUrl = \
                     episode['num'], episode['title'], episode['audioUrl'], episode['coverUrl']
             audioExt = getUrlFileExt(episodeAudioUrl)
-            audioFileName = f'{programTitle}/{episodeNum} - {episodeTitle}{audioExt}'
-            saveFile(episodeAudioUrl, audioFileName)
+            audioFileName = os.path.join(programTitle, sanitizeFileName(f'{episodeNum} - {episodeTitle}{audioExt}'))
+            if os.path.isfile(audioFileName):
+                continue
+
+            newPrograms.append(audioFileName)
+            try:
+                saveFile(episodeAudioUrl, audioFileName)
+            except Exception as e:
+                # Something went wrong
+                print(f'Could not save \'{audioFileName}\': {e}')
+                continue
             if audioExt == '.mp3':
                 mp3 = eyed3.load(audioFileName)
                 mp3.initTag()
@@ -64,10 +95,16 @@ def downloadPrograms(programs):
 
                 mp3.tag.save()
             sleep(1)
+    return newPrograms
 
 
 if __name__ == '__main__':
     import sys
     programs = json.load(sys.stdin)
-    downloadPrograms(programs)
-
+    newPrograms = downloadPrograms(programs)
+    if len(newPrograms):
+        print('New programs:')
+        for newProgram in newPrograms:
+            print(f'{newProgram}')
+    else:
+        print('No new programs')
